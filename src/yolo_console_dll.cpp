@@ -226,18 +226,19 @@ std::vector<std::string> objects_names_from_file(std::string const filename) {
 
 int main(int argc, char *argv[])
 {
-    std::string  names_file = "data/coco.names";
-    std::string  cfg_file = "cfg/yolov3.cfg";
-    std::string  weights_file = "yolov3.weights";
-    std::string filename;
+    std::string  names_file = "data/voc.names";
+    std::string  cfg_file = "yolov2-tiny-voc.cfg";
+    std::string  weights_file = "yolov2-tiny.weights";
+    int          cam_index = 0;
 
     if (argc > 4) {    //voc.names yolo-voc.cfg yolo-voc.weights test.mp4        
         names_file = argv[1];
         cfg_file = argv[2];
         weights_file = argv[3];
-        filename = argv[4];
+        cam_index = std::stoi(argv[4]);
     }
-    else if (argc > 1) filename = argv[1];
+    else if (argc > 1) cam_index = std::stoi(argv[1]);
+    std::cout << "Cam Index is: " << cam_index << std::endl;
 
     float const thresh = (argc > 5) ? std::stof(argv[5]) : 0.20;
 
@@ -251,12 +252,8 @@ int main(int argc, char *argv[])
     detector.wait_stream = true;
 #endif
 
-    while (true) 
-    {        
-        std::cout << "input image or video filename: ";
-        if(filename.size() == 0) std::cin >> filename;
-        if (filename.size() == 0) break;
-        
+    while (true)
+    {
         try {
 #ifdef OPENCV
             extrapolate_coords_t extrapolate_coords;
@@ -265,11 +262,6 @@ int main(int argc, char *argv[])
             preview_boxes_t large_preview(100, 150, false), small_preview(50, 50, true);
             bool show_small_boxes = false;
 
-            std::string const file_ext = filename.substr(filename.find_last_of(".") + 1);
-            std::string const protocol = filename.substr(0, 7);
-            if (file_ext == "avi" || file_ext == "mp4" || file_ext == "mjpg" || file_ext == "mov" ||     // video file
-                protocol == "rtmp://" || protocol == "rtsp://" || protocol == "http://" || protocol == "https:/")    // video network stream
-            {
                 cv::Mat cap_frame, cur_frame, det_frame, write_frame;
                 std::queue<cv::Mat> track_optflow_queue;
                 int passed_flow_frames = 0;
@@ -288,7 +280,7 @@ int main(int argc, char *argv[])
                 std::mutex mtx;
                 std::condition_variable cv_detected, cv_pre_tracked;
                 std::chrono::steady_clock::time_point steady_start, steady_end;
-                cv::VideoCapture cap(filename); cap >> cur_frame;
+                cv::VideoCapture cap(cam_index); cap >> cur_frame;
                 int const video_fps = cap.get(CV_CAP_PROP_FPS);
                 cv::Size const frame_size = cur_frame.size();
                 cv::VideoWriter output_video;
@@ -425,14 +417,6 @@ int main(int argc, char *argv[])
                             });
                         }
                     }
-
-#ifndef TRACK_OPTFLOW
-                    // wait detection result for video-file only (not for net-cam)
-                    if (protocol != "rtsp://" && protocol != "http://" && protocol != "https:/") {
-                        std::unique_lock<std::mutex> lock(mtx);
-                        while (!consumed) cv_detected.wait(lock);
-                    }
-#endif
                 }
                 exit_flag = true;
                 if (t_cap.joinable()) t_cap.join();
@@ -440,36 +424,6 @@ int main(int argc, char *argv[])
                 if (t_videowrite.joinable()) t_videowrite.join();
                 std::cout << "Video ended \n";
                 break;
-            }
-            else if (file_ext == "txt") {    // list of image files
-                std::ifstream file(filename);
-                if (!file.is_open()) std::cout << "File not found! \n";
-                else 
-                    for (std::string line; file >> line;) {
-                        std::cout << line << std::endl;
-                        cv::Mat mat_img = cv::imread(line);
-                        std::vector<bbox_t> result_vec = detector.detect(mat_img);
-                        show_console_result(result_vec, obj_names);
-                        //draw_boxes(mat_img, result_vec, obj_names);
-                        //cv::imwrite("res_" + line, mat_img);
-                    }
-                
-            }
-            else {    // image file
-                cv::Mat mat_img = cv::imread(filename);
-                
-                auto start = std::chrono::steady_clock::now();
-                std::vector<bbox_t> result_vec = detector.detect(mat_img);
-                auto end = std::chrono::steady_clock::now();
-                std::chrono::duration<double> spent = end - start;
-                std::cout << " Time: " << spent.count() << " sec \n";
-
-                //result_vec = detector.tracking_id(result_vec);    // comment it - if track_id is not required
-                draw_boxes(mat_img, result_vec, obj_names);
-                cv::imshow("window name", mat_img);
-                show_console_result(result_vec, obj_names);
-                cv::waitKey(0);
-            }
 #else
             //std::vector<bbox_t> result_vec = detector.detect(filename);
 
@@ -481,8 +435,7 @@ int main(int argc, char *argv[])
         }
         catch (std::exception &e) { std::cerr << "exception: " << e.what() << "\n"; getchar(); }
         catch (...) { std::cerr << "unknown exception \n"; getchar(); }
-        filename.clear();
-    }
+        }
 
     return 0;
 }

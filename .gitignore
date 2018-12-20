@@ -4,6 +4,7 @@
 *.out
 *.png
 *.so
+*.avi
 mnist/
 data/
 caffe/
@@ -17,6 +18,11 @@ cfg/
 build/darknet/*
 !build/darknet/YoloWrapper.cs
 .fuse*
+
+*.cfg
+*.weights
+darknet
+uselib
 
 # OS Generated #
 .DS_Store*
